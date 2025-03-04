@@ -6,10 +6,10 @@
 class ExportsBlock
 {
 public:
-    ExportsBlock(DWORD func_rva, const char* dllName, const char* funcName)
+    ExportsBlock(const std::vector<DWORD>& func_rvas, const char* dllName, const std::vector<std::string>& funcNames)
         : buf(nullptr), size(0), reloc_base(0)
     {
-        createBlock(func_rva, dllName, funcName);
+        createBlock(func_rvas, dllName, funcNames);
     }
 
     ~ExportsBlock()
@@ -105,18 +105,20 @@ public:
     size_t size;
 
 protected:
-    size_t calculateSize(DWORD funcs_count, const char* dllName, const char* funcName)
+    size_t calculateSize(DWORD funcs_count, const char* dllName, const std::vector<std::string>& funcNames)
     {
-        size_t func_names_size = strlen(funcName) + 1 + strlen(dllName) + 1;
+        size_t func_names_size = strlen(dllName) + 1;
+        for (int i = 0; i < funcs_count; ++i)
+            func_names_size += funcNames[i].size() + 1;
         size_t funcs_size = (sizeof(DWORD) * 2 + sizeof(WORD)) * (funcs_count + 1) + func_names_size;
         size_t export_area_size = sizeof(IMAGE_EXPORT_DIRECTORY) + funcs_size;
         return export_area_size;
     }
 
-    bool createBlock(DWORD func_rva, const char* dllName, const char* funcName)
+    bool createBlock(const std::vector<DWORD>& func_rvas, const char* dllName, const std::vector<std::string>& funcNames)
     {
-        size_t funcs_count = 1;
-        size_t export_area_size = calculateSize(funcs_count, dllName, funcName);
+        size_t funcs_count = func_rvas.size();
+        size_t export_area_size = calculateSize(funcs_count, dllName, funcNames);
         BYTE* exports_area = (BYTE*)calloc(1, export_area_size);
         IMAGE_EXPORT_DIRECTORY* exp = (IMAGE_EXPORT_DIRECTORY*)exports_area;
         ULONG_PTR last_ptr = (ULONG_PTR)exports_area + sizeof(IMAGE_EXPORT_DIRECTORY);
@@ -127,7 +129,8 @@ protected:
         exp->Base = 1;
 
         DWORD* addresses = (DWORD*)last_ptr;
-        addresses[0] = func_rva;
+        for (int i = 0; i < funcs_count; ++i)
+            addresses[i] = func_rvas[i];
         exp->AddressOfFunctions = ((ULONG_PTR)addresses - (ULONG_PTR)exports_area);
 
         last_ptr += (funcs_count + 1) * sizeof(DWORD);
@@ -139,12 +142,16 @@ protected:
         exp->AddressOfNameOrdinals = ((ULONG_PTR)ordinals - (ULONG_PTR)exports_area);
 
         last_ptr += (funcs_count + 1) * sizeof(WORD);
-        char* names = (char*)last_ptr;
-        ::memcpy(names, funcName, strlen(funcName));
-        last_ptr += strlen(funcName) + 1;
-
-        DWORD names_rva = ((ULONG_PTR)names - (ULONG_PTR)exports_area);
-        name_addr[0] = names_rva;
+        for (int i = 0; i < funcs_count; ++i)
+        {
+            char* names = (char*)last_ptr;
+            const std::string& funcName = funcNames[i];
+            ::memcpy(names, funcName.c_str(), funcName.size());
+            last_ptr += funcName.size() + 1;
+            DWORD names_rva = ((ULONG_PTR)names - (ULONG_PTR)exports_area);
+            name_addr[i] = names_rva;
+            ordinals[i] = (WORD)i;
+        }
 
         char* dll_name_ptr = (char*)last_ptr;
         ::memcpy(dll_name_ptr, dllName, strlen(dllName));

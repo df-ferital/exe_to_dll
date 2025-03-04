@@ -16,6 +16,11 @@ int main(int argc, char *argv[])
     }
     char *filename = argv[1];
     char *outfile = argv[2];
+    char *funcfile = NULL;
+    if (argc >= 4)
+    {
+        funcfile = argv[3];
+    }
 
     PeHandler hndl(filename);
     if (hndl.isDll()) {
@@ -32,7 +37,7 @@ int main(int argc, char *argv[])
         return -1;
     }
     std::cout << "[OK] Converted successfuly." << std::endl;
-    if (hndl.savePe(outfile)) {
+    if (hndl.savePe(outfile, funcfile)) {
         std::cout << "[OK] Module dumped to: " << outfile << std::endl;
     }
     return 0;

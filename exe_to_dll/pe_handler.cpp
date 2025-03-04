@@ -64,15 +64,25 @@ bool PeHandler::exeToDllPatch()
     return peconv::update_entry_point_rva(this->pe_ptr, new_ep);
 }
 
-bool PeHandler::savePe(const char *out_path)
+bool PeHandler::savePe(const char *out_path, const char *func_file)
 {
     std::string path = out_path;
     std::string dllname = path.substr(path.find_last_of("/\\") + 1);
 
-    ExportsBlock exp(this->ep, dllname.c_str(), "Start");
+    if (func_file != NULL) {
+        this->loadFunctionsFile(func_file);
+    }
+
+    if (this->func_rvas.empty()) {
+        this->func_rvas = { this->ep };
+        this->func_names = { std::string("Start") };
+    }
+
+    ExportsBlock exp(func_rvas, dllname.c_str(), func_names);
     if (!exp.appendToPE(pe_ptr)) {
         std::cerr << "[!] Failed to create an Export Directory!\n";
     }
+
     size_t out_size = 0;
     /*in this case we need to use the original module base, because
     * the loaded PE was not relocated */
@@ -91,4 +101,28 @@ bool PeHandler::savePe(const char *out_path)
         peconv::free_pe_buffer(unmapped_module, v_size);
     }
     return is_ok;
+}
+
+void PeHandler::loadFunctionsFile(const char* func_file)
+{
+    size_t r_size = 0;
+    BYTE *raw_data = peconv::load_file(func_file, r_size);
+    if (!raw_data) return;
+
+    char *data_ptr = reinterpret_cast<char*>(raw_data);
+    while (*data_ptr) {
+        char func_name[128];
+        DWORD func_rva = 0;
+        int num = sscanf(data_ptr, "%s %x", func_name, &func_rva);
+        if (num < 2) break;
+
+        this->func_rvas.push_back(func_rva);
+        this->func_names.push_back(std::string(func_name));
+
+        data_ptr = strchr(data_ptr, '\n');
+        if (data_ptr == NULL) break;
+        data_ptr++;
+    }
+
+    peconv::free_file(raw_data);
 }

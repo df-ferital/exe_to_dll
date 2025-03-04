@@ -31,13 +31,18 @@ public:
     bool setExe();
 
     bool exeToDllPatch();
-    bool savePe(const char *path);
+    bool savePe(const char *path, const char *func_file);
 protected:
+
+    void loadFunctionsFile(const char *func_file);
 
     size_t v_size;
     BYTE *pe_ptr;
 
     bool is64bit;
     DWORD ep;
+
+    std::vector<DWORD> func_rvas;
+    std::vector <std::string> func_names;
 
 };
